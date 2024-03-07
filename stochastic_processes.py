@@ -1,7 +1,9 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
+
 from scipy.stats import poisson
+from dataclasses import dataclass
 
 # source c:/users/gouwenss/miniconda3/etc/profile.d/conda.sh
 # TODO
@@ -18,22 +20,17 @@ class Options():
     pass
 
 # This could be a dataclass, maybe. Finish and make it work with Lotka Volterra
+@dataclass
 class Functionmaker():
-    """A class to generate lists of functions that serve as input for  systems of SDE's."""
-    def __init__(self, constant, part_x, part_y, part_x_y):
-        self.constant = constant
-        self.part_x = part_x
-        self.part_y = part_y
-        self.part_x_y = part_x_y
-        
-        self.functions_f = self.generate_linears()
-        # self.functions_g = self.generate_linears()
-        
-    def generate_linears(self):
+    """This dataclass contains a set of standard functions that are commonly used
+    within stochastic integration and stochastic differential equaltions."""
 
+    def generate_linears(self, constant, part_x, part_y, part_x_y):
+        """This function is able to generate any (list of) linear functions of the form
+        f(t, x) = c0 + c1*t + c2*x + c3*t*x"""
         function_list = []
         
-        for p_c, p_x, p_y, p_xy in zip(self.constant, self.part_x, self.part_y, self.part_x_y):
+        for p_c, p_x, p_y, p_xy in zip(constant, part_x, part_y, part_x_y):
 
             def linear_function(x, y, pc=p_c, px=p_x, py=p_y, pxy=p_xy):
                 return pc + px*x + py*y + pxy*x*y
@@ -41,6 +38,29 @@ class Functionmaker():
             function_list.append(linear_function)
 
         return function_list
+    
+    @staticmethod
+    def f_func(t, x):
+        return np.sin(t) + x
+    
+    @staticmethod
+    def f_ornstein(t,x):
+        """Mean function of Ornstein-Uhlenbeck process for testing purposes"""
+        return 0.7*(1.5-x)
+
+    @staticmethod
+    def g_ornstein(t,x):
+        """Variance function of Ornstein-Uhlenbeck process"""
+        return 0.06
+    
+    #dSt = St(μdt + σdWt)
+    @staticmethod
+    def f_blackscholes(t, x):
+        return 0.1*x
+    
+    @staticmethod
+    def g_blackscholes(t, x):
+        return 0.05*x
     
 class StochasticProcess():
     """A framework that is able to generate a range of stochastic processes."""
@@ -200,7 +220,7 @@ class StochasticProcess():
 
         plt.show()
 
-class StochasticIntegration(StochasticProcess):
+class StochasticIntegration(StochasticProcess, Functionmaker):
     """Contains the methods that perform stochastic integration. This class is actually unneccessary as it is a special case of solving an SDE of the form:
     dXs = f(s,Ms)dMs"""
 
@@ -220,9 +240,6 @@ class StochasticIntegration(StochasticProcess):
             self.integrator = self.brownianmotion
             print("Invalid input. Brownian motion selected as integrator")
 
-    @staticmethod
-    def f_func(t, x):
-        return np.sin(t) + x
 
     def stochastic_integral(self, fun=f_func):
         """Computes samples of the stochastic integral w.r.t. a martingale. Requires a function f(t,x) as input (x=Xt)"""
@@ -240,26 +257,7 @@ class SdeSolver(StochasticIntegration):
         
         super().__init__(time, timestep, number, poisson_rate, scale, shape, integrator)
 
-    # Move these test-functions to the function generator class
-    @staticmethod
-    def f_ornstein(t,x):
-        """Mean function of Ornstein-Uhlenbeck process for testing purposes"""
-        return 0.7*(1.5-x)
-
-    @staticmethod
-    def g_ornstein(t,x):
-        """Variance function of Ornstein-Uhlenbeck process"""
-        return 0.06
-    
-    #dSt = St(μdt + σdWt)
-    @staticmethod
-    def f_blackscholes(t, x):
-        return 0.1*x
-    
-    @staticmethod
-    def g_blackscholes(t, x):
-        return 0.05*x
-        
+         
     def solve_sde(self, value_init=0, f_func=f_blackscholes, g_func=g_blackscholes, num=50):
         """Enter a SDE in the form dX(t)=f(t,Xt)X(t)dt + g(t,Xt)dB(t)"""
         t, Mt = self.integrator()
