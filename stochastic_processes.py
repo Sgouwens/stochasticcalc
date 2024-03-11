@@ -19,21 +19,25 @@ from dataclasses import dataclass
 class Options():
     pass
 
-# This could be a dataclass, maybe. Finish and make it work with Lotka Volterra
 @dataclass
 class Functionmaker():
     """This dataclass contains a set of standard functions that are commonly used
     within stochastic integration and stochastic differential equaltions."""
 
-    def generate_linears(self, constant, part_x, part_y, part_x_y):
+    def generate_linears(self, 
+                         constant=[0, 0], 
+                         part_t=[0, 0], 
+                         part_x=[0, 0], 
+                         part_y=[0, 0], 
+                         part_x_y=[0, 0]):
         """This function is able to generate any (list of) linear functions of the form
         f(t, x) = c0 + c1*t + c2*x + c3*t*x"""
         function_list = []
         
-        for p_c, p_x, p_y, p_xy in zip(constant, part_x, part_y, part_x_y):
+        for p_c, p_t, p_x, p_y, p_xy in zip(constant, part_t, part_x, part_y, part_x_y):
 
-            def linear_function(x, y, pc=p_c, px=p_x, py=p_y, pxy=p_xy):
-                return pc + px*x + py*y + pxy*x*y
+            def linear_function(t, x, y, pc=p_c, pt=p_t, px=p_x, py=p_y, pxy=p_xy):
+                return pc + pt*t + px*x + py*y + pxy*x*y
             
             function_list.append(linear_function)
 
@@ -197,7 +201,6 @@ class StochasticProcess():
 
         return Xt_stopped
 
-
     @staticmethod
     def plot_mean(t, Xt):
         Xt_mean = np.mean(Xt, axis=0)
@@ -208,10 +211,22 @@ class StochasticProcess():
         Xt_var = np.var(Xt, axis=0)
         plt.plot(t, Xt_var, color="black")
 
-    def plot_solution(self, t, Xt, num_max=50, alpha=0.4, with_mean=False, with_var=False, color=None):
+    @staticmethod
+    def compute_quantiles(Mt, c=0.05):
+        quantiles = np.quantile(Mt, q=[c/2, (1-c/2)], axis=0)
+        return quantiles
+    
+    def plot_quantiles(self, t, Mt, c=0.05):
+        quantiles = self.compute_quantiles(Mt, c=c)
+        plt.fill_between(t, y1=quantiles[0,:], y2=quantiles[1,:], alpha=0.1)
+
+    def plot_solution(self, t, Xt, num_max=20, alpha=0.4, with_mean=False, with_var=False, with_quantiles=True, color=None):
         for i in range(min(Xt.shape[0], num_max)):
             plt.plot(t, Xt[i], alpha=alpha, color=color)
     
+        if with_quantiles:
+            self.plot_quantiles(t, Xt)
+
         if with_mean:
             self.plot_mean(t, Xt)
 
@@ -241,25 +256,24 @@ class StochasticIntegration(StochasticProcess, Functionmaker):
             print("Invalid input. Brownian motion selected as integrator")
 
 
-    def stochastic_integral(self, fun=f_func):
+    def stochastic_integral(self, fun):
         """Computes samples of the stochastic integral w.r.t. a martingale. Requires a function f(t,x) as input (x=Xt)"""
-        
-        # t, Mt = self.integrator(*arg)
-        
+                
         t, Mt = self.integrator()
         dMt = np.hstack((np.diff(Mt), np.zeros((Mt.shape[0], 1)))) 
         Xt = np.cumsum(fun(t, Mt) * dMt, axis=1)
         return t, Xt
     
-class SdeSolver(StochasticIntegration):
+class SdeSolver(StochasticIntegration, Functionmaker):
 
     def __init__(self, time, timestep, number, poisson_rate=None, scale=None, shape=None, integrator="brownianmotion"):
         
         super().__init__(time, timestep, number, poisson_rate, scale, shape, integrator)
 
          
-    def solve_sde(self, value_init=0, f_func=f_blackscholes, g_func=g_blackscholes, num=50):
+    def solve_sde(self, f_func, g_func, num=50, value_init=0):
         """Enter a SDE in the form dX(t)=f(t,Xt)X(t)dt + g(t,Xt)dB(t)"""
+        
         t, Mt = self.integrator()
         dMt = np.hstack((np.diff(Mt), np.zeros((Mt.shape[0], 1)))) 
 
@@ -269,6 +283,9 @@ class SdeSolver(StochasticIntegration):
             Xt[:,i] = Xt[:,i-1] + f_func(t[i-1],Xt[:,i-1])*self.timestep + g_func(t[i-1],Xt[:,i-1])*dMt[:,i]
 
         return t, Xt
+    
+    def solve_sde_system(self, f_funcs, g_funcs, num=50, value_init=0):
+        pass
     
     @staticmethod
     def european_option(t, x, call_time, strike_price):
