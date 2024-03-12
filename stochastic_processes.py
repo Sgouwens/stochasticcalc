@@ -19,6 +19,43 @@ from dataclasses import dataclass
 class Options():
     pass
 
+class Plotprocess():
+    """A class containing all the plotting actions."""
+    @staticmethod
+    def plot_mean(t, Xt):
+        Xt_mean = np.mean(Xt, axis=0)
+        plt.plot(t, Xt_mean, color="black")
+
+    @staticmethod
+    def plot_var(t, Xt):
+        Xt_var = np.var(Xt, axis=0)
+        plt.plot(t, Xt_var, color="black")
+
+    @staticmethod
+    def compute_quantiles(Mt, c=0.05):
+        quantiles = np.quantile(Mt, q=[c/2, (1-c/2)], axis=0)
+        return quantiles
+    
+    def plot_quantiles(self, t, Mt, c=0.05):
+        quantiles = self.compute_quantiles(Mt, c=c)
+        plt.fill_between(t, y1=quantiles[0,:], y2=quantiles[1,:], alpha=0.1)
+
+    def plot_solution(self, t, Xt, num_max=20, alpha=0.4, with_mean=False, with_var=False, with_quantiles=True, color=None, show=True):
+        for i in range(min(Xt.shape[0], num_max)):
+            plt.plot(t, Xt[i], alpha=alpha, color=color)
+    
+        if with_quantiles:
+            self.plot_quantiles(t, Xt)
+
+        if with_mean:
+            self.plot_mean(t, Xt)
+
+        if with_var:
+            self.plot_var(t, Xt)
+
+        if show:
+            plt.show()
+
 @dataclass
 class Functionmaker():
     """This dataclass contains a set of standard functions that are commonly used
@@ -66,7 +103,7 @@ class Functionmaker():
     def g_blackscholes(t, x):
         return 0.05*x
     
-class StochasticProcess():
+class StochasticProcess(Plotprocess):
     """A framework that is able to generate a range of stochastic processes."""
 
     def __init__(self, time, timestep, number, poisson_rate=None, scale=None, shape=None):
@@ -201,39 +238,7 @@ class StochasticProcess():
 
         return Xt_stopped
 
-    @staticmethod
-    def plot_mean(t, Xt):
-        Xt_mean = np.mean(Xt, axis=0)
-        plt.plot(t, Xt_mean, color="black")
 
-    @staticmethod
-    def plot_var(t, Xt):
-        Xt_var = np.var(Xt, axis=0)
-        plt.plot(t, Xt_var, color="black")
-
-    @staticmethod
-    def compute_quantiles(Mt, c=0.05):
-        quantiles = np.quantile(Mt, q=[c/2, (1-c/2)], axis=0)
-        return quantiles
-    
-    def plot_quantiles(self, t, Mt, c=0.05):
-        quantiles = self.compute_quantiles(Mt, c=c)
-        plt.fill_between(t, y1=quantiles[0,:], y2=quantiles[1,:], alpha=0.1)
-
-    def plot_solution(self, t, Xt, num_max=20, alpha=0.4, with_mean=False, with_var=False, with_quantiles=True, color=None):
-        for i in range(min(Xt.shape[0], num_max)):
-            plt.plot(t, Xt[i], alpha=alpha, color=color)
-    
-        if with_quantiles:
-            self.plot_quantiles(t, Xt)
-
-        if with_mean:
-            self.plot_mean(t, Xt)
-
-        if with_var:
-            self.plot_var(t, Xt)
-
-        plt.show()
 
 class StochasticIntegration(StochasticProcess, Functionmaker):
     """Contains the methods that perform stochastic integration. This class is actually unneccessary as it is a special case of solving an SDE of the form:
