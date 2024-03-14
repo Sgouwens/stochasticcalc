@@ -5,42 +5,38 @@ import seaborn as sns
 from scipy.stats import poisson
 from dataclasses import dataclass
 
-# source c:/users/gouwenss/miniconda3/etc/profile.d/conda.sh
-# TODO
-
-# 4) Split the classes into multiple:
-# 4.1) One class for generating the functions as input for LV-sde
-# 4.2) Separate class for computing different options (just do european/american/asian)
-# 4.3) Think of where plot statements are best places. And does it make sense to put the plotting of paths/denstiies in the same class?
-# 4.4) Separate subclass that can deal with stopping times?
-
 # 5) Put the parameters for poisson rate etc in the ppoisson things. do not keep them so general in the class call
-
-class Options():
-    pass
 
 class Plotprocess():
     """A class containing all the plotting actions."""
+
     @staticmethod
     def plot_mean(t, Xt):
+        """Plots the mean of sample paths as a function of time"""
         Xt_mean = np.mean(Xt, axis=0)
         plt.plot(t, Xt_mean, color="black")
 
     @staticmethod
     def plot_var(t, Xt):
+        
+        """Plots the variance of sample paths as a function of time"""
         Xt_var = np.var(Xt, axis=0)
         plt.plot(t, Xt_var, color="black")
 
     @staticmethod
     def compute_quantiles(Mt, c=0.05):
+        """Computes [a, 1-a] of sample paths as a function of time. By default, a is 0.025"""
         quantiles = np.quantile(Mt, q=[c/2, (1-c/2)], axis=0)
         return quantiles
     
     def plot_quantiles(self, t, Mt, c=0.05):
+        """Plots [a, 1-a] of sample paths at each time. By default, a is 0.025"""
         quantiles = self.compute_quantiles(Mt, c=c)
         plt.fill_between(t, y1=quantiles[0,:], y2=quantiles[1,:], alpha=0.1)
 
     def plot_solution(self, t, Xt, num_max=20, alpha=0.4, with_mean=False, with_var=False, with_quantiles=True, color=None, show=True):
+        """Function that plots (a subset of) the sample paths of a stochastic. 
+        The with_* arguments allow to choose whether means, variances and quantiles are plotted."""
         for i in range(min(Xt.shape[0], num_max)):
             plt.plot(t, Xt[i], alpha=alpha, color=color)
     
@@ -116,8 +112,8 @@ class StochasticProcess(Plotprocess):
         self.steps = int(time/timestep)
 
     def poissonprocess(self):
-        # Hij stijgt maar de helft van de snelheid die die moet stijgen
-        # Voeg ook nog een scaler toe.
+        """Generate sample paths of a poisson process. This is a step function that
+        jumps by a value of 1 at exponential times."""
         num_samples = int(2*poisson.ppf(0.997, self.time / self.poisson_rate)) # This can be turned into a separate function
 
         event_times = np.cumsum(np.random.exponential(scale=self.poisson_rate, size=[self.number, num_samples]), axis=1)
@@ -132,7 +128,8 @@ class StochasticProcess(Plotprocess):
         return t, Nt.astype(int)
     
     def laplaceprocess(self):
-        """Generates a laplace process with class-bound scale parameter. This is simply a poisson process with laplace-distributed jumps"""
+        """Generate a laplace process with class-bound scale parameter. 
+        This is a Poisson process with laplace-distributed jumps"""
         t, Nt = self.poissonprocess()
         Lt = np.zeros_like(Nt, dtype=float)
 
@@ -146,7 +143,8 @@ class StochasticProcess(Plotprocess):
         return t, Lt
     
     def compoundgamma(self):
-        """Generates a compound gamma process with class-bound scale parameter. This is simply a poisson process with laplace-distributed jumps"""
+        """Generate a compound gamma process with class-bound scale parameter. 
+        This is a Poisson process with laplace-distributed jumps"""
         t, Nt = self.poissonprocess()
         Lt = np.zeros_like(Nt, dtype=float)
 
@@ -164,48 +162,39 @@ class StochasticProcess(Plotprocess):
         return t, Lt
     
     def compoundgammaprocess(self, scale=1):
-        """Generates a Levy process. This is a brownian motion plus a laplace process."""
+        """Generate a Gamma jump process. This is a Brownian motion plus a Gamma process."""
         t, Bt = self.brownianmotion()
         t, Lt = self.compoundgamma()
         Xt = Bt + Lt
         return t, Xt
     
     def levyprocess(self):
-        """Generates a Levy process. This is a brownian motion plus a laplace process."""
+        """Generate a Laplace jump process. This is a Brownian motion plus a Laplace process."""
         t, Bt = self.brownianmotion()
         t, Lt = self.laplaceprocess()
         Xt = Bt + Lt
         return t, Xt
 
     def symmetricpoissonprocess(self):
-        """Not a conventional process, a brownian motion plus a stable mixture of Poisson processes"""
+        """Not a conventional process, a Brownian motion plus a symmetric Poisson process."""
         t, Nt1 = self.poissonprocess()
         _, Nt2 = self.poissonprocess()
         Mt = Nt1 - Nt2
         return t, Mt
     
     def brownianmotion(self):
+        """Generate sample paths of a Brownian motion."""
         t = np.arange(0, self.time, self.timestep)
         Bt = np.random.normal(loc=0, scale=np.sqrt(self.timestep), 
                               size=(self.number, self.steps-1))
         Bt = np.hstack((np.zeros((Bt.shape[0], 1)), Bt))
         Bt = np.cumsum(Bt, axis=1)
         return t, Bt
-    
-    def brownianpoissonprocess(self):
-        t, Bt = self.brownianmotion()
-        t, Mt = self.symmetricpoissonprocess()
-        return t, Bt + Mt
-    
-    def geometricbrownianmotion(self, mu, sigma, s0=1):
-        """Could be removed. this should be the solution of black-scholes"""
-        t, Bt = self.brownianmotion()
-        Xt = s0 * np.exp((mu-sigma**2/2)*t + sigma*Bt)
-        return t, Xt
-    
+        
     @staticmethod
     def findstoppingindices(Mt, tau):
-        """Finds value of stopping time. If process is not yet stopped, the last time-index is returned"""
+        """Finds value of stopping time. If process is not yet stopped, the last time-index is returned.
+        For accurate computations, small timesteps (<0.001) are important."""
 
         tau_index_upper = np.argmax(Mt >= tau, axis=1)
         tau_index_lower = np.argmax(-Mt >= tau, axis=1)
@@ -237,7 +226,6 @@ class StochasticProcess(Plotprocess):
             Xt_stopped[i, idx:] = np.nan
 
         return Xt_stopped
-
 
 
 class StochasticIntegration(StochasticProcess, Functionmaker):
@@ -294,17 +282,15 @@ class SdeSolver(StochasticIntegration, Functionmaker):
     
     @staticmethod
     def european_option(t, x, call_time, strike_price):
-
-        strike_time_idx = np.where(t==call_time) # warning if not found. due to fragmentation. could interpolate but ,.... geen zin in
-        strike_time_values = x[:, strike_time_idx].flatten() # flattening to meet dimensional requirements
+        """Compute the value of a set of sample paths at a specific time. 
+        Returns the value max(S-K, 0) where S is the strike price and K the option price"""
+        strike_time_idx = np.where(t==call_time) 
+        strike_time_values = x[:, strike_time_idx].flatten()
         
         return np.maximum(strike_time_values-strike_price, 0)
     
-
-    # American options can be exercised at any moment before the expiration date. In order to make a function, we also need to define an exercise strategy
-    
     def plot_returns(self, t, x, call_time, strike_price):
-
+        """DO NOT USE! could be removed or moved to plotting class"""
         returns = self.european_option(t, x, call_time, strike_price)
         sns.kdeplot(returns, fill=True)
         plt.show()
@@ -312,13 +298,11 @@ class SdeSolver(StochasticIntegration, Functionmaker):
 
 if __name__=="__main__":
     
-    # sdesolve = SdeSolver(time=10, timestep=0.02, number=2500, poisson_rate=4, shape=1, scale=1, integrator="brownianmotion")
-    # t, Xt = sdesolve.solve_sde(value_init=1)
-    # sdesolve.plot_solution(t, Xt, with_mean=True, with_var=False)
+    sdesolve = SdeSolver(time=4, timestep=0.001, number=100, integrator="brownianmotion")
 
-    # sdesolve.plot_returns(t, Xt, call_time=9, strike_price=1.2)
-
-    process = StochasticProcess(time=10, timestep=0.01, number=10, poisson_rate=5000, shape=.1, scale=.1)
-    t, Xt = process.levyprocess()
-    process.plot_solution(t, Xt, with_mean=True, with_var=False)
+    f_integrate_dt = sdesolve.f_blackscholes
+    g_integrate_dBt = sdesolve.g_blackscholes
+    
+    t, Xt = sdesolve.solve_sde(f_func=f_integrate_dt, g_func=g_integrate_dBt, value_init=1)
+    sdesolve.plot_solution(t, Xt, with_mean=True, with_var=False)
 
