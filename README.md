@@ -19,5 +19,6 @@ In the notebook the integral $\int_0^t\sin(t)dW_t$ is solved. The solution looks
 ![stochint sin dwt](https://github.com/Sgouwens/stochasticcalc/assets/150426079/4fb3e46f-fcae-4b0d-880d-2685c0b6cb39)
 
 And a simplified version of the black scholes is solved:
+
 ![black scholes simplified](https://github.com/Sgouwens/stochasticcalc/assets/150426079/a421aa5a-acef-40ca-9193-564a368f40eb)
 
