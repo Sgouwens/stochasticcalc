@@ -6,8 +6,6 @@ import seaborn as sns
 from scipy.stats import poisson
 from dataclasses import dataclass
 
-# 5) Put the parameters for poisson rate etc in the ppoisson things. do not keep them so general in the class call
-
 class Plotprocess():
     """A class containing all the plotting actions."""
 
@@ -35,7 +33,7 @@ class Plotprocess():
         quantiles = self.compute_quantiles(Mt, c=c)
         plt.fill_between(t, y1=quantiles[0,:], y2=quantiles[1,:], alpha=0.1)
 
-    def plot_solution(self, t, Xt, num_max=20, alpha=0.4, with_mean=False, with_var=False, with_quantiles=True, color=None, show=True):
+    def plot_solution(self, t, Xt, num_max=20, alpha=0.4, with_mean=False, with_var=False, with_quantiles=False, color=None, show=True):
         """Function that plots (a subset of) the sample paths of a stochastic. 
         The with_* arguments allow to choose whether means, variances and quantiles are plotted."""
         for i in range(min(Xt.shape[0], num_max)):
@@ -267,7 +265,7 @@ class SdeSolver(StochasticIntegration, Functionmaker):
     @staticmethod
     def get_derivative(func, x, y, h=10e-8):
         """Obtain the numerical derivative of a function. Function is used to compute the derivative of the function g in SDE's."""
-        y_prime = (func(x+h/2, y) - func(x-h/2, y)) / h # <- Is this the correct derivative?
+        y_prime = (func(x, y+h/2) - func(x, y-h/2)) / h # <- Is this the correct derivative?
         return y_prime
 
     def timestep_euler_maruyama(self, old_value, f_func, g_func, time, dt, dMt):
