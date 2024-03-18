@@ -1,4 +1,5 @@
 import numpy as np
+import sympy as sp
 import matplotlib.pyplot as plt
 import seaborn as sns
 
@@ -102,14 +103,14 @@ class Functionmaker():
 class StochasticProcess(Plotprocess):
     """A framework that is able to generate a range of stochastic processes."""
 
-    def __init__(self, time, timestep, number, poisson_rate=None, scale=None, shape=None):
+    def __init__(self, time, dt, number, poisson_rate=None, scale=None, shape=None):
         self.time = time
-        self.timestep = timestep
+        self.dt = dt
         self.number = number
         self.poisson_rate = poisson_rate
         self.scale = scale 
         self.shape = shape 
-        self.steps = int(time/timestep)
+        self.steps = int(time/dt)
 
     def poissonprocess(self):
         """Generate sample paths of a poisson process. This is a step function that
@@ -117,9 +118,9 @@ class StochasticProcess(Plotprocess):
         num_samples = int(2*poisson.ppf(0.997, self.time / self.poisson_rate)) # This can be turned into a separate function
 
         event_times = np.cumsum(np.random.exponential(scale=self.poisson_rate, size=[self.number, num_samples]), axis=1)
-        event_times_disc = np.round(event_times / self.timestep) * self.timestep
+        event_times_disc = np.round(event_times / self.dt) * self.dt
 
-        t = np.arange(0, self.time, self.timestep)
+        t = np.arange(0, self.time, self.dt)
         Nt = np.zeros((self.number, t.shape[0]))
 
         for idx, time in enumerate(t):
@@ -184,8 +185,8 @@ class StochasticProcess(Plotprocess):
     
     def brownianmotion(self):
         """Generate sample paths of a Brownian motion."""
-        t = np.arange(0, self.time, self.timestep)
-        Bt = np.random.normal(loc=0, scale=np.sqrt(self.timestep), 
+        t = np.arange(0, self.time, self.dt)
+        Bt = np.random.normal(loc=0, scale=np.sqrt(self.dt), 
                               size=(self.number, self.steps-1))
         Bt = np.hstack((np.zeros((Bt.shape[0], 1)), Bt))
         Bt = np.cumsum(Bt, axis=1)
@@ -232,9 +233,9 @@ class StochasticIntegration(StochasticProcess, Functionmaker):
     """Contains the methods that perform stochastic integration. This class is actually unneccessary as it is a special case of solving an SDE of the form:
     dXs = f(s,Ms)dMs"""
 
-    def __init__(self, time, timestep, number, poisson_rate=None, scale=None, shape=None, integrator="brownianmotion"):
+    def __init__(self, time, dt, number, poisson_rate=None, scale=None, shape=None, integrator="brownianmotion"):
 
-        super().__init__(time, timestep, number, poisson_rate, scale, shape)
+        super().__init__(time, dt, number, poisson_rate, scale, shape)
 
         if integrator=="brownianmotion":
             self.integrator = self.brownianmotion
@@ -259,21 +260,48 @@ class StochasticIntegration(StochasticProcess, Functionmaker):
     
 class SdeSolver(StochasticIntegration, Functionmaker):
 
-    def __init__(self, time, timestep, number, poisson_rate=None, scale=None, shape=None, integrator="brownianmotion"):
+    def __init__(self, time, dt, number, poisson_rate=None, scale=None, shape=None, integrator="brownianmotion"):
         
-        super().__init__(time, timestep, number, poisson_rate, scale, shape, integrator)
+        super().__init__(time, dt, number, poisson_rate, scale, shape, integrator)
 
-         
-    def solve_sde(self, f_func, g_func, num=50, value_init=0):
+    @staticmethod
+    def get_derivative(func, x, y, h=10e-8):
+        """Obtain the numerical derivative of a function. Function is used to compute the derivative of the function g in SDE's."""
+        y_prime = (func(x+h/2, y) - func(x-h/2, y)) / h # <- Is this the correct derivative?
+        return y_prime
+
+    def timestep_euler_maruyama(self, old_value, f_func, g_func, time, dt, dMt):
+        """Performs a single step of the Euler-Maruyama method"""
+        new_value = old_value + f_func(time, old_value)*dt + g_func(time, old_value)*dMt
+        return new_value
+
+    def timestep_milstein(self, old_value, f_func, g_func, time, dt, dMt):
+        """Performs a single step of the Milstein method"""
+
+        g_func_part = g_func(time, old_value)
+        g_func_deriv = self.get_derivative(g_func, time, old_value)
+
+        step_euler_maruyama = self.timestep_euler_maruyama(old_value, f_func, g_func, time, dt, dMt)
+        step_milstein_correction = .5 * g_func_part * g_func_deriv * (dMt**2-dt)
+
+        new_value_milstein = step_euler_maruyama + step_milstein_correction
+        return new_value_milstein
+           
+        
+    def solve_sde(self, f_func, g_func, num=50, value_init=0, method="Euler Maruyama"):
         """Enter a SDE in the form dX(t)=f(t,Xt)X(t)dt + g(t,Xt)dB(t)"""
+
+        if method=="Euler Maruyama":
+            timestep_function = self.timestep_euler_maruyama
+        elif method=="Milstein":
+            timestep_function = self.timestep_milstein
         
         t, Mt = self.integrator()
         dMt = np.hstack((np.diff(Mt), np.zeros((Mt.shape[0], 1)))) 
-
         Xt = np.full_like(Mt, fill_value=value_init) 
 
         for i in range(1, Mt.shape[1]):
-            Xt[:,i] = Xt[:,i-1] + f_func(t[i-1],Xt[:,i-1])*self.timestep + g_func(t[i-1],Xt[:,i-1])*dMt[:,i]
+            Xt[:,i] = timestep_function(Xt[:,i-1], f_func, g_func, t[i-1], self.dt, dMt[:,i])
 
         return t, Xt
     
@@ -298,7 +326,7 @@ class SdeSolver(StochasticIntegration, Functionmaker):
 
 if __name__=="__main__":
     
-    sdesolve = SdeSolver(time=4, timestep=0.001, number=100, integrator="brownianmotion")
+    sdesolve = SdeSolver(time=4, dt=0.001, number=100, integrator="brownianmotion")
 
     f_integrate_dt = sdesolve.f_blackscholes
     g_integrate_dBt = sdesolve.g_blackscholes
