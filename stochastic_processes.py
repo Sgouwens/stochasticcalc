@@ -113,7 +113,7 @@ class StochasticProcess(Plotprocess):
     def poissonprocess(self):
         """Generate sample paths of a poisson process. This is a step function that
         jumps by a value of 1 at exponential times."""
-        num_samples = int(2*poisson.ppf(0.997, self.time / self.poisson_rate)) # This can be turned into a separate function
+        num_samples = int(2*poisson.ppf(0.997, self.time / self.poisson_rate)) 
 
         event_times = np.cumsum(np.random.exponential(scale=self.poisson_rate, size=[self.number, num_samples]), axis=1)
         event_times_disc = np.round(event_times / self.dt) * self.dt
@@ -322,13 +322,11 @@ class SdeSolver(StochasticIntegration, Functionmaker):
         plt.show()
     
 
-if __name__=="__main__":
-    
-    sdesolve = SdeSolver(time=4, dt=0.001, number=100, integrator="brownianmotion")
+if __name__=="__main__":    
+    sdesolve = SdeSolver(time=4, dt=0.001, number=100, poisson_rate=1, scale=0.05, shape=0.1, integrator="levyprocess")
 
-    f_integrate_dt = sdesolve.f_blackscholes
-    g_integrate_dBt = sdesolve.g_blackscholes
+    f_func = sdesolve.f_blackscholes
+    g_func = sdesolve.g_blackscholes
     
-    t, Xt = sdesolve.solve_sde(f_func=f_integrate_dt, g_func=g_integrate_dBt, value_init=1)
-    sdesolve.plot_solution(t, Xt, with_mean=True, with_var=False)
-
+    t, Xt = sdesolve.solve_sde(f_func=f_func, g_func=g_func, value_init=1, method="Milstein")
+    sdesolve.plot_solution(t, Xt, with_mean=True, with_var=False, with_quantiles=True)
