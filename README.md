@@ -1,3 +1,5 @@
+Note that the description below is not complete
+
 # Stochastic Calculus
 In this project, a set of classes is made that is able to solve stochastic differential equations numerically. 
 
